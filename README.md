@@ -7,6 +7,6 @@ Packages needed:
   geocoder,
   requests,
   time,
-  pandas,
+  pandas.
 
 Video if if someone wants to see an example of how to work and run the program: https://youtu.be/tKtDZ_-GuBo
