@@ -6,20 +6,27 @@ still relatively fast without using an API key. It has been tested up to 50,000 
 it can geocode 100 addresses in 1-2 minutes.
 
 Ethan Hicks
-8-7-2018
+Created: 8-7-2018
+Updated: 4/22/2020 (Updated to Python 3.8)
 """
 
 import geocoder
 import requests
 import time
 import pandas as pd
+import os
 
 
 # ----------------------------- CONFIGURATION -----------------------------#
 
 # Set the input and output files
-input_file_path = "input.csv"
-output_file_path = "output"  # appends "####.csv" to the file name when it writes the file.
+input_file_path = "short.csv"
+output_dir = "output"
+output_file_path = output_dir + "/geocoded_output"  # appends "####.csv" to the file name when it writes the file.
+
+if not os.path.isdir(output_dir):
+    print("Created the output directory \"{}\" since it did not exist.".format(output_dir))
+    os.mkdir(output_dir)
 
 # Set the name of the column indexes here so that pandas can read the CSV file
 address_column_name = "ADDRESS"
@@ -33,7 +40,7 @@ start_index = 0
 # How often the program prints the status of the running program
 status_rate = 100
 # How often the program saves a backup file
-write_data_rate = 1000
+write_data_rate = 500
 # How many times the program tries to geocode an address before it gives up
 attempts_to_geocode = 3
 # Time it delays each time it does not find an address
@@ -52,7 +59,7 @@ if state_column_name not in df.columns:
     raise ValueError("Can't find the state column in the input file.")
 
 # Zip code is not needed but helps provide more accurate locations
-if (zip_column_name):
+if zip_column_name:
     if zip_column_name not in df.columns:
         raise ValueError("Can't find the zip code column in the input file.")
     addresses = (df[address_column_name] + ', ' + df[zip_column_name].astype(str) + ', ' + df[state_column_name]).tolist()
@@ -77,7 +84,7 @@ def create_sessions():
 # Main geocoding function that uses the geocoding package to covert addresses into lat, longs
 def geocode_address(address, s):
     g = geocoder.arcgis(address, session=s.Arcgis)
-    if (g.ok == False):
+    if not g.ok:
         g = geocoder.komoot(address, session=s.Komoot)
 
     return g
@@ -85,10 +92,10 @@ def geocode_address(address, s):
 
 def try_address(address, s, attempts_remaining, wait_time):
     g = geocode_address(address, s)
-    if (g.ok == False):
+    if not g.ok:
         time.sleep(wait_time)
         s = create_sessions()  # It is not very likely that we can't find an address so we create new sessions and wait
-        if (attempts_remaining > 0):
+        if attempts_remaining > 0:
             try_address(address, s, attempts_remaining-1, wait_time+wait_time)
     return g
 
@@ -99,7 +106,7 @@ def write_data(data, index):
     print("Created the file: " + file_name)
     done = pd.DataFrame(data)
     done.columns = ['Address', 'Lat', 'Long', 'Provider']
-    done.to_csv((file_name + ".csv"), sep=',', encoding='utf8')
+    done.to_csv((file_name + ".csv"), sep=',', encoding='utf8', index=False)
 
 
 # Variables used in the main for loop that do not need to be modified by the user
@@ -113,17 +120,16 @@ progress = len(addresses) - start_index
 
 for i, address in enumerate(addresses[start_index:]):
     # Print the status of how many addresses have be processed so far and how many of the failed.
-    if ((start_index + i) % status_rate == 0):
+    if (start_index + i) % status_rate == 0:
         total_failed += failed
-        print(
-            "Completed {} of {}. Failed {} for this section and {} in total.".format(i + start_index, progress, failed,
-                                                                                     total_failed))
+        print("Completed {} of {}. Failed {} for this section and {} in total."
+              .format(i + start_index, progress, failed, total_failed))
         failed = 0
 
     # Try geocoding the addresses
     try:
         g = try_address(address, s, attempts_to_geocode, wait_time)
-        if (g.ok == False):
+        if not g.ok:
             results.append([address, "was", "not", "geocoded"])
             print("Gave up on address: " + address)
             failed += 1
@@ -137,7 +143,7 @@ for i, address in enumerate(addresses[start_index:]):
             time.sleep(5)
             s = create_sessions()
             g = geocode_address(address, s)
-            if (g.ok == False):
+            if not g.ok:
                 print("Did not fine it.")
                 results.append([address, "was", "not", "geocoded"])
                 failed += 1
@@ -150,12 +156,12 @@ for i, address in enumerate(addresses[start_index:]):
             results.append([address, e, e, "ERROR"])
 
     # Writing what has been processed so far to an output file
-    if (i%write_data_rate == 0 and i != 0):
+    if i % write_data_rate == 0 and i != 0:
         write_data(results, i + start_index)
 
     # print(i, g.latlng, g.provider)
 
 
 # Finished
-write_data(results, i + start_index + 1)
+write_data(results, "_done")
 print("Finished! :)")
